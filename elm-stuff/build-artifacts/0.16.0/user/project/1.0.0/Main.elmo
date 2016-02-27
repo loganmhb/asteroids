@@ -1,0 +1,132 @@
+Elm.Main = Elm.Main || {};
+Elm.Main.make = function (_elm) {
+   "use strict";
+   _elm.Main = _elm.Main || {};
+   if (_elm.Main.values) return _elm.Main.values;
+   var _U = Elm.Native.Utils.make(_elm),
+   $Basics = Elm.Basics.make(_elm),
+   $Color = Elm.Color.make(_elm),
+   $Debug = Elm.Debug.make(_elm),
+   $Graphics$Collage = Elm.Graphics.Collage.make(_elm),
+   $Graphics$Element = Elm.Graphics.Element.make(_elm),
+   $Keyboard = Elm.Keyboard.make(_elm),
+   $List = Elm.List.make(_elm),
+   $Maybe = Elm.Maybe.make(_elm),
+   $Random = Elm.Random.make(_elm),
+   $Result = Elm.Result.make(_elm),
+   $Signal = Elm.Signal.make(_elm),
+   $Text = Elm.Text.make(_elm),
+   $Time = Elm.Time.make(_elm),
+   $Window = Elm.Window.make(_elm);
+   var _op = {};
+   var delta = A2($Signal.map,$Time.inSeconds,$Time.fps(35));
+   var txt = F2(function (f,string) {    return $Graphics$Element.leftAligned(f($Text.monospace(A2($Text.color,$Color.white,$Text.fromString(string)))));});
+   var renderShip = function (_p0) {
+      var _p1 = _p0;
+      return A2($Graphics$Collage.rotate,
+      _p1.heading,
+      A2($Graphics$Collage.move,
+      {ctor: "_Tuple2",_0: _p1.x,_1: _p1.y},
+      A2($Graphics$Collage.filled,
+      $Color.white,
+      $Graphics$Collage.polygon(_U.list([{ctor: "_Tuple2",_0: -10,_1: -10},{ctor: "_Tuple2",_0: 0,_1: 15},{ctor: "_Tuple2",_0: 10,_1: -10}])))));
+   };
+   var renderAsteroids = function (asteroids) {
+      return A2($List.map,
+      function (a) {
+         return A2($Graphics$Collage.move,
+         {ctor: "_Tuple2",_0: a.x,_1: a.y},
+         A2($Graphics$Collage.outlined,$Graphics$Collage.solid($Color.white),A2($Graphics$Collage.ngon,5,20)));
+      },
+      asteroids);
+   };
+   var wrapScalar = F2(function (x,max) {    return _U.cmp(x,max) > 0 ? 0 - max : _U.cmp(x,0 - max) < 0 ? max : x;});
+   var Input = F3(function (a,b,c) {    return {delta: a,pauseKey: b,arrows: c};});
+   var input = A2($Signal.sampleOn,delta,A4($Signal.map3,Input,delta,$Keyboard.enter,$Keyboard.arrows));
+   var timeSeed = function (t) {    return function (_p2) {    return $Random.initialSeed($Basics.round(_p2));}(t);};
+   var asteroid = F2(function (_p4,_p3) {    var _p5 = _p4;var _p6 = _p3;return {x: _p5._0,y: _p5._1,dx: _p6._0,dy: _p6._1};});
+   var randomVelocity = A2($Random.pair,A2($Random.$float,-200,200),A2($Random.$float,-200,200));
+   var Game = F3(function (a,b,c) {    return {state: a,player: b,asteroids: c};});
+   var Asteroid = F4(function (a,b,c,d) {    return {x: a,y: b,dx: c,dy: d};});
+   var Player = F4(function (a,b,c,d) {    return {x: a,y: b,heading: c,v: d};});
+   var _p7 = {ctor: "_Tuple2",_0: 600,_1: 600};
+   var gameWidth = _p7._0;
+   var gameHeight = _p7._1;
+   var _p8 = {ctor: "_Tuple2",_0: gameWidth / 2,_1: gameHeight / 2};
+   var halfWidth = _p8._0;
+   var halfHeight = _p8._1;
+   var randomCoordinate = A2($Random.pair,A2($Random.$float,0 - halfWidth,halfWidth),A2($Random.$float,0 - halfHeight,halfHeight));
+   var randomAsteroid = A3($Random.map2,asteroid,randomCoordinate,randomVelocity);
+   var randomAsteroids = function (seed) {    var _p9 = A2($Random.generate,A2($Random.list,5,randomAsteroid),seed);var result = _p9._0;return result;};
+   var updateAsteroid = F2(function (t,asteroid) {
+      var dt = t;
+      var newX = asteroid.x + dt * asteroid.dx;
+      var newY = asteroid.y + dt * asteroid.dy;
+      return _U.update(asteroid,{x: A2(wrapScalar,newX,halfWidth),y: A2(wrapScalar,newY,halfHeight)});
+   });
+   var Pause = {ctor: "Pause"};
+   var newGame = {state: Pause,player: {x: 0,y: 0,heading: 0,v: 0},asteroids: _U.list([])};
+   var Play = {ctor: "Play"};
+   var flipState = function (s) {    return _U.eq(s,Play) ? Pause : Play;};
+   var update = F2(function (_p11,_p10) {
+      var _p12 = _p11;
+      var _p16 = _p12.delta;
+      var _p13 = _p10;
+      var _p15 = _p13.player;
+      var _p14 = _p13;
+      var rotationSpeed = 0.3;
+      var newPlayer = _U.update(_p15,{heading: _p15.heading + rotationSpeed * $Basics.toFloat(_p12.arrows.x)});
+      var newAsteroids = _U.eq(_p14.asteroids,_U.list([])) ? randomAsteroids(timeSeed(_p16)) : _U.eq(_p14.state,Pause) ? _p14.asteroids : A2($List.map,
+      updateAsteroid(_p16),
+      _p14.asteroids);
+      var newState = _p12.pauseKey ? Play : _p14.state;
+      return _U.update(_p14,{state: newState,asteroids: newAsteroids,player: newPlayer});
+   });
+   var gameState = A3($Signal.foldp,update,newGame,input);
+   var view = F2(function (_p17,game) {
+      var _p18 = _p17;
+      var state = A2(txt,$Basics.identity,_U.eq(game.state,Play) ? "" : "Paused");
+      return A4($Graphics$Element.container,
+      _p18._0,
+      _p18._1,
+      $Graphics$Element.middle,
+      A3($Graphics$Collage.collage,
+      gameWidth,
+      gameHeight,
+      _U.list([A2($Graphics$Collage.filled,$Color.black,A2($Graphics$Collage.rect,gameWidth,gameHeight))
+              ,A2($Graphics$Collage.move,{ctor: "_Tuple2",_0: 0,_1: 0},$Graphics$Collage.toForm(state))
+              ,renderShip(game.player)
+              ,$Graphics$Collage.group(renderAsteroids(game.asteroids))])));
+   });
+   var main = A3($Signal.map2,view,$Window.dimensions,gameState);
+   return _elm.Main.values = {_op: _op
+                             ,Play: Play
+                             ,Pause: Pause
+                             ,gameHeight: gameHeight
+                             ,gameWidth: gameWidth
+                             ,halfHeight: halfHeight
+                             ,halfWidth: halfWidth
+                             ,Player: Player
+                             ,Asteroid: Asteroid
+                             ,Game: Game
+                             ,randomCoordinate: randomCoordinate
+                             ,randomVelocity: randomVelocity
+                             ,asteroid: asteroid
+                             ,randomAsteroid: randomAsteroid
+                             ,timeSeed: timeSeed
+                             ,newGame: newGame
+                             ,Input: Input
+                             ,wrapScalar: wrapScalar
+                             ,updateAsteroid: updateAsteroid
+                             ,randomAsteroids: randomAsteroids
+                             ,flipState: flipState
+                             ,update: update
+                             ,renderAsteroids: renderAsteroids
+                             ,renderShip: renderShip
+                             ,view: view
+                             ,txt: txt
+                             ,main: main
+                             ,gameState: gameState
+                             ,delta: delta
+                             ,input: input};
+};
