@@ -11,10 +11,6 @@ import Signal
 import Window
 
 -- TODO
--- - More Collisions
--- - Make bullets not wrap
--- - Rate-limit shots
--- - Filter offscreen bullets
 -- - Make bullets destroy asteroids
 -- - Explosions (with physics!)
 -- - Asteroid fragmentation
@@ -29,7 +25,7 @@ type State = Play | Pause | Over
 
 type alias Mover a = { a | x : Float, y : Float, dx : Float, dy : Float }
 
-type alias Player = Mover { heading : Float, accelerating : Bool }
+type alias Player = Mover { heading : Float, accelerating : Bool, cooldown : Int }
 
 type alias Asteroid = Mover {}
 
@@ -64,7 +60,13 @@ timeSeed t = (Random.initialSeed << round) t
 newGame : Game
 newGame =
   { state = Pause
-  , player = { x = 0, y = 0, heading = 0, accelerating = False, dx = 0, dy = 0 }
+  , player = { x = 0
+             , y = 0
+             , heading = 0
+             , accelerating = False
+             , dx = 0
+             , dy = 0
+             , cooldown = 0 }
   , asteroids = []
   , bullets = []
   }
@@ -148,11 +150,23 @@ newBullet {player} =
 
 
 addBulletIfNeeded : Input -> Game -> Game
-addBulletIfNeeded input game =
-  if input.fireKey == True then
-    { game | bullets = newBullet game :: game.bullets}
-  else
-    game
+addBulletIfNeeded input ({player} as game) =
+  let cooldown = game.player.cooldown
+      decrementCooldown = (\player ->
+                            if player.cooldown > 0 then
+                              { player |
+                                  cooldown = player.cooldown - 1
+                              }
+                            else
+                              player)
+  in
+    if input.fireKey == True && cooldown == 0 then
+      { game |
+          bullets = newBullet game :: game.bullets,
+          player = { player | cooldown = 5}
+      }
+    else
+      { game | player = decrementCooldown game.player }
 
 
 playerHasCollided : Game -> Bool
