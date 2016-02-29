@@ -173,7 +173,7 @@ view (w, h) game =
   let state = txt identity (if game.state == Play then
                               ""
                             else if game.state == Pause then
-                              "Paused"
+                              "Paused (ENTER to start)"
                             else "Game Over")
   in
     container w h middle <|
