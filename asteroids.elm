@@ -10,9 +10,7 @@ import Signal exposing (constant)
 import Window
 
 -- TODO
--- - Enable ship rotation
--- - Enable ship movement
--- - Collisions
+-- - More Collisions
 -- - Firing
 -- - Asteroid fragmentation
 
