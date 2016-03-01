@@ -11,9 +11,9 @@ import Signal
 import Window
 
 -- TODO
--- - Make bullets destroy asteroids
+-- - Remove a bullet when it hits an asteroid
 -- - Explosions (with physics!)
--- - Asteroid fragmentation
+-- - Better asteroid fragmentation/change of velocity for new small asteroids
 
 -- MODEL
 
@@ -27,7 +27,9 @@ type alias Mover a = { a | x : Float, y : Float, dx : Float, dy : Float }
 
 type alias Player = Mover { heading : Float, accelerating : Bool, cooldown : Int }
 
-type alias Asteroid = Mover {}
+type AsteroidSize = Small | Medium | Large
+
+type alias Asteroid = Mover { size : AsteroidSize }
 
 type alias Bullet = Mover { ttl : Float }
 
@@ -42,15 +44,25 @@ randomCoordinate : Generator (Float, Float)
 randomCoordinate =
   Random.pair (Random.float -halfWidth halfWidth) (Random.float -halfHeight halfHeight)
 
+
 randomVelocity : Generator (Float, Float)
 randomVelocity = Random.pair (Random.float -200 200) (Random.float -200 200)
 
-asteroid : (Float, Float) -> (Float, Float) -> Asteroid
-asteroid (rx, ry) (rdx, rdy) = {x = rx, y = ry, dx = rdx, dy = rdy}
+
+randomSize : Generator AsteroidSize
+randomSize =
+  Random.map (\i -> case i of
+        1 -> Small
+        2 -> Medium
+        _ -> Large) (Random.int 1 3)
+
+
+asteroid : (Float, Float) -> (Float, Float) -> AsteroidSize -> Asteroid
+asteroid (rx, ry) (rdx, rdy) size = {x = rx, y = ry, dx = rdx, dy = rdy, size = size}
 
 randomAsteroid : Generator Asteroid
 randomAsteroid =
-  Random.map2 asteroid randomCoordinate randomVelocity
+  Random.map3 asteroid randomCoordinate randomVelocity randomSize
 
 timeSeed : Time -> Seed
 timeSeed t = (Random.initialSeed << round) t
@@ -169,13 +181,56 @@ addBulletIfNeeded input ({player} as game) =
       { game | player = decrementCooldown game.player }
 
 
+near : Float -> (Float, Float) -> (Float, Float) -> Bool
+near radius (x1, y1) (x2, y2) =
+  sqrt ((x1 - x2)^2 + (y1 - y2)^2) < radius
+
+
 playerHasCollided : Game -> Bool
 playerHasCollided ({asteroids, player} as game) =
-  List.any (\a -> (abs (a.x - player.x) < 20) && (abs (a.y - player.y)) < 20) asteroids
+  List.any (\a -> near 20 (player.x, player.y) (a.x, a.y)) asteroids
 
 updateState : Game -> Game
 updateState game =
   { game | state =  if playerHasCollided game then Over else game.state }
+
+
+rotateAsteroidCourse : Float -> Asteroid -> Asteroid
+rotateAsteroidCourse radianDiff asteroid =
+  let currentAngle = atan (asteroid.dy / asteroid.dx)
+      newAngle = currentAngle + radianDiff
+  in
+    { asteroid |
+        dy = asteroid.dy + sin newAngle,
+        dx = asteroid.dx + cos newAngle
+    }
+
+
+fragmentAsteroid : Asteroid -> List Asteroid
+fragmentAsteroid a =
+  let childAsteroids = (\newSize ->
+                        [rotateAsteroidCourse -15 { a | size = newSize},
+                         rotateAsteroidCourse 1 {a | size = newSize}])
+  in
+    case a.size of
+      Small -> []
+      Medium -> childAsteroids Small
+      Large -> childAsteroids Medium
+
+
+asteroidIsShot : List Bullet -> Asteroid -> Bool
+asteroidIsShot bullets asteroid =
+  List.any (\bullet ->
+              (near 20 (asteroid.x, asteroid.y) (bullet.x, bullet.y))) bullets
+
+fragmentShotAsteroids : Game -> Game
+fragmentShotAsteroids game =
+  let collidedAsteroids = List.filter (asteroidIsShot game.bullets) game.asteroids
+      uncollidedAsteroids = List.filter (not << (asteroidIsShot game.bullets)) game.asteroids
+  in
+    { game |
+        asteroids = uncollidedAsteroids ++ List.concatMap fragmentAsteroid collidedAsteroids
+    }
 
 
 updateAsteroids : Time -> Game -> Game
@@ -186,7 +241,9 @@ updateAsteroids delta game =
                   else if game.state == Pause then
                     game.asteroids
                   else
-                    List.map (physicsUpdate delta) game.asteroids }
+                    game.asteroids
+                     |> List.map (physicsUpdate delta)
+  }           |> fragmentShotAsteroids
 
 
 updateBullets : Time -> Game -> Game
@@ -216,15 +273,22 @@ renderBullets : List Bullet -> List Form
 renderBullets bullets =
   List.map (\b -> circle 3 |> filled Color.white |> move (b.x, b.y)) bullets
 
-renderAsteroids : List Asteroid -> List Form
-renderAsteroids asteroids =
-  List.map (\a -> outlined (solid Color.white) (ngon 5 20) |> move (a.x, a.y)) asteroids
+
+renderAsteroid : Asteroid -> Form
+renderAsteroid asteroid =
+  let size = case asteroid.size of
+               Small -> 7
+               Medium -> 14
+               Large -> 20
+  in
+    outlined (solid Color.white) (ngon 5 size) |> move (asteroid.x, asteroid.y)
 
 
 renderThrust : Player -> Maybe Form
 renderThrust {x, y, heading, accelerating} =
   case accelerating of
-    True -> Just (filled Color.orange (polygon [(-10, 5), (-15, 0), (-10, -5)]))
+    True -> Just (group [(filled Color.orange (polygon [(-10, 5), (-18, 0), (-10, -5)])),
+                        (filled Color.lightBlue (polygon [(-10, 5), (-15, 0), (-10, -5)]))])
     False -> Nothing
 
 renderShip : Player -> Form
@@ -255,7 +319,7 @@ view (w, h) game =
       -- Player's ship
       , renderShip game.player
       -- Asteroids
-      , group (renderAsteroids game.asteroids)
+      , group (List.map renderAsteroid game.asteroids)
       , group (renderBullets game.bullets)]
 
 txt f string =
