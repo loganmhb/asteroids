@@ -11,13 +11,15 @@ import Signal
 import Window
 
 -- TODO
+-- - Refactor Mover to use {heading, velocity} in place of {dx, dy}
 -- - Remove a bullet when it hits an asteroid
+-- - Random new asteroids
 -- - Explosions (with physics!)
 -- - Better asteroid fragmentation/change of velocity for new small asteroids
 
 -- MODEL
 
-type State = Play | Pause | Over
+type State = Start | Play | Pause | Over
 
 (gameWidth, gameHeight) = (600, 600)
 (halfWidth, halfHeight) = (gameWidth / 2, gameHeight / 2)
@@ -40,6 +42,12 @@ type alias Game =
   , bullets : List Bullet
   }
 
+
+rotationSpeed = -0.3
+accelerationCoefficient = 4
+bulletSpeed = 300
+
+
 randomCoordinate : Generator (Float, Float)
 randomCoordinate =
   Random.pair (Random.float -halfWidth halfWidth) (Random.float -halfHeight halfHeight)
@@ -60,18 +68,19 @@ randomSize =
 asteroid : (Float, Float) -> (Float, Float) -> AsteroidSize -> Asteroid
 asteroid (rx, ry) (rdx, rdy) size = {x = rx, y = ry, dx = rdx, dy = rdy, size = size}
 
+
 randomAsteroid : Generator Asteroid
 randomAsteroid =
   Random.map3 asteroid randomCoordinate randomVelocity randomSize
 
+
 timeSeed : Time -> Seed
 timeSeed t = (Random.initialSeed << round) t
 
--- Create an empty game (paused, no asteroids)
 
 newGame : Game
 newGame =
-  { state = Pause
+  { state = Start
   , player = { x = 0
              , y = 0
              , heading = 0
@@ -82,6 +91,7 @@ newGame =
   , asteroids = []
   , bullets = []
   }
+
 
 type alias Input =
   { delta : Time
@@ -119,8 +129,6 @@ randomAsteroids seed =
   in
     result
 
-rotationSpeed = -0.3
-accelerationCoefficient = 4 -- i.e. how much thrust engine applies
 
 updatePlayer : Input -> Game -> Game
 updatePlayer {delta, arrows} ({player} as game) =
@@ -145,10 +153,6 @@ updatePlayer {delta, arrows} ({player} as game) =
     { game |
         player =  physicsUpdate delta (setNewFields player)
     }
-
-
-bulletSpeed : Float
-bulletSpeed = 300
 
 
 newBullet : Game -> Bullet
@@ -223,6 +227,7 @@ asteroidIsShot bullets asteroid =
   List.any (\bullet ->
               (near 20 (asteroid.x, asteroid.y) (bullet.x, bullet.y))) bullets
 
+
 fragmentShotAsteroids : Game -> Game
 fragmentShotAsteroids game =
   let collidedAsteroids = List.filter (asteroidIsShot game.bullets) game.asteroids
@@ -236,14 +241,9 @@ fragmentShotAsteroids game =
 updateAsteroids : Time -> Game -> Game
 updateAsteroids delta game =
   { game |
-      asteroids = if game.asteroids == [] then
-                    randomAsteroids (timeSeed delta)
-                  else if game.state == Pause then
-                    game.asteroids
-                  else
-                    game.asteroids
-                     |> List.map (physicsUpdate delta)
-  }           |> fragmentShotAsteroids
+    asteroids = game.asteroids
+                 |> List.map (physicsUpdate delta)
+  } |> fragmentShotAsteroids
 
 
 updateBullets : Time -> Game -> Game
@@ -251,7 +251,8 @@ updateBullets delta game =
   let decrementTtl = (\bullet -> { bullet | ttl = bullet.ttl - delta })
   in
     { game |
-        bullets = List.map ((physicsUpdate delta) >> decrementTtl) game.bullets
+        bullets = game.bullets
+                    |> (List.map <| (physicsUpdate delta >> decrementTtl))
                     |> List.filter (\bullet -> bullet.ttl > 0)
     }
 
@@ -259,6 +260,10 @@ updateBullets delta game =
 update : Input -> Game -> Game
 update ({delta, pauseKey, arrows} as input) ({player} as game) =
   case game.state of
+    Start -> { game |
+                 asteroids = randomAsteroids (timeSeed delta),
+                 state = Pause
+             }
     Over -> if pauseKey then newGame else game
     Pause -> if pauseKey then {game | state = Play} else game
     Play -> updateState game
@@ -291,6 +296,7 @@ renderThrust {x, y, heading, accelerating} =
                         (filled Color.lightBlue (polygon [(-10, 5), (-15, 0), (-10, -5)]))])
     False -> Nothing
 
+
 renderShip : Player -> Form
 renderShip ({x, y, heading} as player) =
   let ship = filled Color.white (polygon [(-10, -10), (15, 0), (-10, 10)])
@@ -301,6 +307,7 @@ renderShip ({x, y, heading} as player) =
     shipWithThrust
       |> move (x, y)
       |> rotate heading
+
 
 view : (Int, Int) -> Game -> Element
 view (w, h) game =
