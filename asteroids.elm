@@ -11,7 +11,6 @@ import Signal
 import Window
 
 -- TODO
--- - Refactor Mover to use {heading, velocity} in place of {dx, dy}
 -- - Remove a bullet when it hits an asteroid
 -- - Random new asteroids
 -- - Explosions (with physics!)
@@ -313,8 +312,11 @@ renderThrust {facing, accelerating} =
       Just (group [(filled Color.orange (polygon [(-10, 5),
                                                   (-18, 0),
                                                   (-10, -5)])),
+                   (filled Color.yellow (polygon [(-10, 5),
+                                                  (-15, 0),
+                                                  (-10, -5)])),
                    (filled Color.lightBlue (polygon [(-10, 5),
-                                                     (-15, 0),
+                                                     (-13, 0),
                                                      (-10, -5)]))])
     False ->
       Nothing
