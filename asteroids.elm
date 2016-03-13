@@ -11,7 +11,6 @@ import Signal
 import Window
 
 -- TODO
--- - Remove a bullet when it hits an asteroid
 -- - Random new asteroids
 -- - Explosions (with physics!)
 -- - Better asteroid fragmentation/change of velocity for new small asteroids
@@ -238,19 +237,24 @@ fragmentAsteroid a =
       Large -> childAsteroids Medium
 
 
-asteroidIsShot : List Bullet -> Asteroid -> Bool
-asteroidIsShot bullets asteroid =
-  List.any (\bullet ->
-              (near 20 asteroid.location bullet.location)) bullets
+objectShouldBeRemoved : List (Mover a) -> Mover b -> Bool
+objectShouldBeRemoved targets object =
+  List.any (\target ->
+              (near 20 object.location target.location)) targets
 
 
 fragmentShotAsteroids : Game -> Game
 fragmentShotAsteroids game =
-  let collidedAsteroids = List.filter (asteroidIsShot game.bullets) game.asteroids
-      uncollidedAsteroids = List.filter (not << (asteroidIsShot game.bullets)) game.asteroids
+  let collidedAsteroids =
+        List.filter (objectShouldBeRemoved game.bullets) game.asteroids
+      uncollidedAsteroids =
+        List.filter (not << (objectShouldBeRemoved game.bullets)) game.asteroids
   in
     { game |
-        asteroids = uncollidedAsteroids ++ List.concatMap fragmentAsteroid collidedAsteroids
+        asteroids =
+          uncollidedAsteroids ++ List.concatMap fragmentAsteroid collidedAsteroids,
+        bullets =
+          List.filter (not << (objectShouldBeRemoved game.asteroids)) game.bullets
     }
 
 
